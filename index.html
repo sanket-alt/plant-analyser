@@ -60,24 +60,23 @@
                         <p>Initializing Camera & AI...</p>
                     </div>
                 </div>
-                <div class="flex flex-col gap-3">
-                    <div class="flex flex-col sm:flex-row gap-3">
-                        <button id="cameraButton" class="btn btn-outline w-full" disabled>
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.414-1.414A1 1 0 0011.586 3H8.414a1 1 0 00-.707.293L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" /></svg>
-                            <span id="cameraButtonText">Capture</span>
-                        </button>
-                        <label for="uploadInput" class="btn btn-outline w-full">
-                           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
-                            Upload Image
-                        </label>
-                        <input type="file" id="uploadInput" class="hidden" accept="image/*">
-                    </div>
-                    <button id="analyzeButton" class="btn btn-primary w-full" disabled>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z" /><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a4 4 0 00-3.446 6.032l-2.261 2.26a1 1 0 101.414 1.414l2.26-2.26A4 4 0 1011 5z" clip-rule="evenodd" /></svg>
-                        Run Diagnosis
+                <!-- === MODIFIED BUTTONS & LAYOUT START === -->
+                <div class="flex flex-col gap-3 mt-2">
+                    <button id="cameraButton" class="btn btn-primary w-full" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.414-1.414A1 1 0 0011.586 3H8.414a1 1 0 00-.707.293L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" /></svg>
+                        <span id="cameraButtonText">Capture</span>
                     </button>
+                    <div class="text-center my-1">
+                        <span class="text-xs text-gray-400 font-medium">OR</span>
+                    </div>
+                    <label for="uploadInput" class="btn btn-outline w-full cursor-pointer">
+                       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
+                        Upload an Image File
+                    </label>
+                    <input type="file" id="uploadInput" class="hidden" accept="image/*">
                 </div>
-                 <p id="cameraStatus" class="text-sm text-center text-red-600"></p>
+                 <p id="cameraStatus" class="text-sm text-center text-gray-500 h-5"></p>
+                 <!-- === MODIFIED BUTTONS & LAYOUT END === -->
             </div>
 
             <div class="right-panel panel flex flex-col">
@@ -92,7 +91,7 @@
                         <div>
                             <h3 class="font-semibold text-gray-700 mb-2">Leaf Condition Analysis</h3>
                             <div id="leaf-analysis-results" class="space-y-3 text-sm p-3 bg-gray-50 rounded-lg">
-                                <p class="text-gray-500">Capture or upload an image and run diagnosis.</p>
+                                <p class="text-gray-500">Capture or upload an image to start diagnosis.</p>
                             </div>
                         </div>
                         <div>
@@ -132,13 +131,13 @@
     import { GoogleGenerativeAI } from "@google/generative-ai";
 
     document.addEventListener('DOMContentLoaded', () => {
-
+        // --- Element References ---
         const webcamVideo = document.getElementById('webcamVideo');
         const capturedImage = document.getElementById('capturedImage');
         const cameraButton = document.getElementById('cameraButton');
         const cameraButtonText = document.getElementById('cameraButtonText');
         const uploadInput = document.getElementById('uploadInput');
-        const analyzeButton = document.getElementById('analyzeButton');
+        // No analyzeButton anymore
         const loader = document.getElementById('loader');
         const cameraStatus = document.getElementById('cameraStatus');
         const humidityEl = document.getElementById('humidity');
@@ -157,31 +156,28 @@
             ai: { btn: document.getElementById('tab-ai'), content: document.getElementById('content-ai') }
         };
 
-
+        // --- State and Config ---
         let stream;
         let imageClassifier;
         let genAI;
-        const API_KEY = "AIzaSyCfcajex2bOkpVk1v_oJtxqbDUCFaiDm0w";
+        const API_KEY = ""; // IMPORTANT: PASTE YOUR GOOGLE API KEY HERE
         const TM_URL = "https://teachablemachine.withgoogle.com/models/DQjZ3_KaK/";
         const THINGSPEAK_CHANNEL_ID = 3014588;
 
-   
+        // --- View Management ---
         function showLiveFeed() {
             webcamVideo.classList.remove('hidden');
             capturedImage.classList.add('hidden');
             cameraButtonText.textContent = 'Capture';
-            analyzeButton.disabled = true;
         }
 
         function showCapturedImage() {
             webcamVideo.classList.add('hidden');
             capturedImage.classList.remove('hidden');
             cameraButtonText.textContent = 'Use Live Camera';
-            if (imageClassifier) {
-                analyzeButton.disabled = false;
-            }
         }
 
+        // --- Core Functions ---
         async function initCamera() {
             try {
                 stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -203,12 +199,9 @@
             try {
                 imageClassifier = await tmImage.load(TM_URL + "model.json", TM_URL + "metadata.json");
                 console.log("Image classifier loaded");
-                if (!capturedImage.classList.contains('hidden') && !capturedImage.src.includes('placehold.co')) {
-                    analyzeButton.disabled = false;
-                }
             } catch (error) {
                 console.error("Image Model Load Error:", error);
-                cameraStatus.textContent = 'Failed to load image AI model.';
+                cameraStatus.innerHTML = '<span class="text-red-600">Failed to load image AI model.</span>';
             }
         }
         
@@ -220,6 +213,7 @@
             canvas.getContext('2d').drawImage(webcamVideo, 0, 0);
             capturedImage.src = canvas.toDataURL('image/png');
             showCapturedImage();
+            runFullAnalysis(); // <<< Auto-run diagnosis
         }
 
         async function getGeminiVisionAnalysis(imageDataUrl) {
@@ -227,39 +221,34 @@
                 console.error("Gemini AI not initialized. Please provide an API key.");
                 return { isPlantVisible: false, summary: "AI not configured." };
             }
-
             const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
             const imagePart = dataUrlToGenerativePart(imageDataUrl, 'image/png');
-
             if (!imagePart) {
                 return { isPlantVisible: false, summary: "No valid image provided." };
             }
-
             const prompt = `Analyze the provided image. Determine if a real plant or leaf is the main subject. Provide a brief, one-sentence summary of the plant's visual health. Respond in JSON format with keys: "isPlantVisible" (boolean) and "summary" (string).`;
-            
             try {
                  const result = await model.generateContent([prompt, imagePart]);
                  const response = result.response;
                  const text = response.text().replace(/```json\n?|```/g, '').trim();
                  return JSON.parse(text);
             } catch(e) {
-                console.error("Gemini Vision Error:", e);
+                console.error("Vision AI Error:", e);
                 return { isPlantVisible: false, summary: "Error analyzing image with AI." };
             }
         }
 
         async function runFullAnalysis() {
             if (capturedImage.src.includes('placehold.co') || !imageClassifier) {
-                cameraStatus.textContent = "Please capture or upload a valid image first.";
+                cameraStatus.innerHTML = '<span class="text-red-600">Please capture or upload an image first.</span>';
                 return;
             }
-
-            analyzeButton.disabled = true;
-            analyzeButton.innerHTML = `<div class="spinner !w-5 !h-5 !border-2"></div> Diagnosing...`;
             
+            // Show loading state
+            cameraStatus.innerHTML = `<div class="flex items-center justify-center gap-2"><div class="spinner !w-4 !h-4 !border-2"></div><span>Running Diagnosis...</span></div>`;
             leafAnalysisResults.innerHTML = `<div class="flex items-center justify-center gap-2 text-gray-500"><div class="spinner !w-5 !h-5 !border-2"></div><p>Running multi-source analysis...</p></div>`;
             diagnosisResult.innerHTML = `<div class="flex items-center justify-center gap-2 text-gray-500"><div class="spinner !w-5 !h-5 !border-2"></div><p>Awaiting results...</p></div>`;
-
+            
             const [tmPrediction, sensorData, geminiAnalysis] = await Promise.all([
                 imageClassifier.predict(capturedImage),
                 fetchSensorData(),
@@ -273,8 +262,8 @@
             
             switchTab('diagnosis');
             
-            analyzeButton.disabled = false;
-            analyzeButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z" /><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a4 4 0 00-3.446 6.032l-2.261 2.26a1 1 0 101.414 1.414l2.26-2.26A4 4 0 1011 5z" clip-rule="evenodd" /></svg> Run Diagnosis`;
+            // Clear loading state
+            cameraStatus.innerHTML = '';
         }
         
         function generateDiagnosis(tmPrediction, sensors, geminiAnalysis) {
@@ -293,7 +282,8 @@
             } else {
                 const tmClassName = tmPrediction.className;
                 const tmConfidence = tmPrediction.probability;
-                combinedAnalysis = `The initial model suggests a high probability of <strong>${tmClassName}</strong>. The Gemini AI vision analysis adds: "<em>${geminiAnalysis.summary}</em>".`;
+                // AI vision analysis (no "Gemini" mention)
+                combinedAnalysis = `The initial model suggests a high probability of <strong>${tmClassName}</strong>. The advanced vision analysis adds: "<em>${geminiAnalysis.summary}</em>".`;
 
                 if (tmClassName.toLowerCase() === 'leaf spot' && tmConfidence > 0.6) {
                     status = 'Diseased';
@@ -390,7 +380,7 @@
             }
             return { inlineData: { data: dataUrl.split(',')[1], mimeType } };
         }
-
+       
         async function getAIAnswer() {
             if (!genAI) {
                 aiAnswer.innerHTML = `<p class="text-red-600">AI Assistant is not configured. Please add an API key.</p>`;
@@ -414,17 +404,14 @@
                 const sensorContext = `Current environmental data is: Temperature: ${temp}, Humidity: ${humidity}, Soil Moisture: ${soil}.`;
                 
                 const promptParts = [];
+                // Refined prompt to avoid self-reference
                 const systemPrompt = `You are an expert AI botanist. Your task is to provide a comprehensive, actionable answer to the user's question by analyzing the provided plant image and sensor data.
 
-                **Analysis Steps:**
-                1.  **Image Analysis:** Examine the leaf color, texture, spots, damage, and overall plant health from the image.
-                2.  **Sensor Data Analysis:** Incorporate this context: ${sensorContext}.
-                3.  **Synthesize:** Combine visual, sensor, and user query information for a holistic recommendation.
-
                 **Response Guidelines:**
-                -   If the image is sufficient, give a direct, specific answer.
-                -   If the image is insufficient, state exactly what you need (e.g., "For a precise recommendation, please capture a new image showing the base of the plant."). Then, provide a general answer.
-                -   Keep answers concise, practical, and under 80 words.
+                - Synthesize all available information (image, sensors, query) for a holistic recommendation.
+                - If the image is insufficient, state exactly what you need to see.
+                - Keep answers concise, practical, and under 80 words.
+                - Do not mention that you are an AI model or refer to yourself.
 
                 User's question: "${question}"`;
                 
@@ -454,6 +441,7 @@
             tabs[tabKey].content.classList.add('active');
         }
 
+        // --- Event Listeners ---
         cameraButton.addEventListener('click', () => {
             if (webcamVideo.classList.contains('hidden')) { showLiveFeed(); } 
             else { captureImageFrame(); }
@@ -469,21 +457,23 @@
                     if (!loader.classList.contains('hidden')) {
                         loader.classList.add('hidden');
                     }
+                    runFullAnalysis(); // <<< Auto-run diagnosis
                 };
                 reader.readAsDataURL(file);
             }
         });
 
-        analyzeButton.addEventListener('click', runFullAnalysis);
+        // No event listener for analyzeButton anymore
         askAIButton.addEventListener('click', getAIAnswer);
         aiQuestionInput.addEventListener('keyup', e => { if (e.key === 'Enter') getAIAnswer(); });
         Object.keys(tabs).forEach(key => { tabs[key].btn.addEventListener('click', () => switchTab(key)); });
 
+        // --- Initialization ---
         async function initializeApp() {
             if (API_KEY) {
                 genAI = new GoogleGenerativeAI(API_KEY);
             } else {
-                cameraStatus.textContent = 'Google API Key not provided. AI features disabled.';
+                cameraStatus.innerHTML = '<span class="text-red-600">Google API Key not provided. AI features disabled.</span>';
             }
 
             await Promise.all([ loadImageClassifier(), initCamera(), fetchSensorData() ]);
