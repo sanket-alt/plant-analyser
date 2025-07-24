@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live AI Plant Health Diagnostics</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        html, body { height: 100%; overflow: hidden; }
+        body { font-family: "Inter", sans-serif; background-color: #f3f4f6; display: flex; justify-content: center; align-items: center; padding: 1rem; }
+        .container { background-color: #ffffff; border-radius: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15); width: 100%; height: calc(100vh - 2rem); max-width: 1400px; max-height: 860px; display: flex; flex-direction: column; border: 1px solid #e5e7eb; }
+        .main-content { display: flex; flex-grow: 1; min-height: 0; flex-direction: column; }
+        @media (min-width: 1024px) { .main-content { flex-direction: row; } }
+        .panel { padding: 1.5rem; overflow-y: auto; }
+        .left-panel { border-bottom: 1px solid #e5e7eb; }
+        .right-panel { display: flex; flex-direction: column; }
+        @media (min-width: 1024px) { .left-panel { flex-basis: 40%; border-right: 1px solid #e5e7eb; border-bottom: 0; } .right-panel { flex-basis: 60%; } }
+        .btn { padding: 0.75rem 1.25rem; border-radius: 0.75rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
+        .btn-primary { background-color: #10b981; color: #ffffff; }
+        .btn-primary:hover { background-color: #059669; }
+        .btn-primary:disabled { background-color: #9ca3af; cursor: not-allowed; }
+        .btn-outline { background-color: transparent; color: #4b5563; border: 1px solid #d1d5db; }
+        .btn-outline:hover { background-color: #f3f4f6; }
+        #webcamVideo, #capturedImage { width: 100%; height: auto; border-radius: 1rem; background-color: #e5e7eb; aspect-ratio: 4 / 3; object-fit: cover; }
+        .tab-button { padding: 0.75rem 1rem; font-weight: 600; color: #6b7280; border-bottom: 3px solid transparent; cursor: pointer; transition: all 0.2s; }
+        .tab-button.active { color: #10b981; border-bottom-color: #10b981; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .progress-bar { background-color: #e5e7eb; border-radius: 0.5rem; overflow: hidden; height: 1.25rem; }
+        .progress-bar-fill { background-color: #10b981; height: 100%; transition: width 0.5s ease-in-out; text-align: right; padding-right: 0.5rem; color: white; font-size: 0.75rem; line-height: 1.25rem; }
+        .spinner { width: 32px; height: 32px; border: 4px solid #e5e7eb; border-left-color: #10b981; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/generative-ai": "https://esm.run/@google/generative-ai"
+        }
+      }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <header class="p-4 border-b border-gray-200 flex items-center justify-between">
+            <h1 class="text-xl font-bold text-gray-800">Live AI Plant Health Diagnostics</h1>
+            <div id="pumpStatusDisplay" class="px-3 py-1 rounded-full text-sm font-semibold hidden"></div>
+        </header>
+
+        <main class="main-content">
+            <div class="left-panel panel flex flex-col gap-4">
+                <div id="image-container" class="relative w-full">
+                    <video id="webcamVideo" autoplay playsinline></video>
+                    <img id="capturedImage" src="https://placehold.co/800x600/e2e8f0/475569?text=Camera+Loading..." alt="Plant Leaf" class="hidden">
+                    <div id="loader" class="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-500 bg-white/80 backdrop-blur-sm rounded-lg">
+                        <div class="spinner"></div>
+                        <p>Initializing Camera & AI...</p>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-3">
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <button id="cameraButton" class="btn btn-outline w-full" disabled>
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.414-1.414A1 1 0 0011.586 3H8.414a1 1 0 00-.707.293L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" /></svg>
+                            <span id="cameraButtonText">Capture</span>
+                        </button>
+                        <label for="uploadInput" class="btn btn-outline w-full">
+                           <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" /></svg>
+                            Upload Image
+                        </label>
+                        <input type="file" id="uploadInput" class="hidden" accept="image/*">
+                    </div>
+                    <button id="analyzeButton" class="btn btn-primary w-full" disabled>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z" /><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a4 4 0 00-3.446 6.032l-2.261 2.26a1 1 0 101.414 1.414l2.26-2.26A4 4 0 1011 5z" clip-rule="evenodd" /></svg>
+                        Run Diagnosis
+                    </button>
+                </div>
+                 <p id="cameraStatus" class="text-sm text-center text-red-600"></p>
+            </div>
+
+            <div class="right-panel panel flex flex-col">
+                <nav class="flex border-b border-gray-200 -mt-2">
+                    <button id="tab-analysis" class="tab-button active">Analysis</button>
+                    <button id="tab-diagnosis" class="tab-button">Diagnosis</button>
+                    <button id="tab-ai" class="tab-button">AI Assistant</button>
+                </nav>
+
+                <div class="flex-grow pt-4 overflow-y-auto">
+                    <div id="content-analysis" class="tab-content active space-y-4">
+                        <div>
+                            <h3 class="font-semibold text-gray-700 mb-2">Leaf Condition Analysis</h3>
+                            <div id="leaf-analysis-results" class="space-y-3 text-sm p-3 bg-gray-50 rounded-lg">
+                                <p class="text-gray-500">Capture or upload an image and run diagnosis.</p>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-gray-700 mb-2">Live Environmental Data</h3>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <div class="p-3 bg-gray-50 rounded-lg text-center"><p class="text-xs text-gray-500">Humidity</p><p id="humidity" class="text-xl font-bold text-gray-800">--</p></div>
+                                <div class="p-3 bg-gray-50 rounded-lg text-center"><p class="text-xs text-gray-500">Temperature</p><p id="temperature" class="text-xl font-bold text-gray-800">--</p></div>
+                                <div class="p-3 bg-gray-50 rounded-lg text-center col-span-2 sm:col-span-1"><p class="text-xs text-gray-500">Soil Moisture</p><p id="soilMoisture" class="text-xl font-bold text-gray-800">--</p></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="content-diagnosis" class="tab-content">
+                         <div id="diagnosis-result" class="p-4 bg-gray-50 rounded-lg min-h-[200px] flex items-center justify-center text-gray-500">
+                            <p>Diagnosis and care recommendations will appear here.</p>
+                        </div>
+                    </div>
+
+                    <div id="content-ai" class="tab-content flex flex-col gap-4 h-full">
+                        <div class="flex-grow p-4 bg-gray-50 rounded-lg space-y-2 overflow-y-auto">
+                            <p class="font-semibold text-gray-700">Live AI Plant Assistant</p>
+                             <div id="ai-answer" class="text-gray-600">
+                                <p>Ask a question about plant care, and the AI will answer.</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-3">
+                            <input type="text" id="ai-question" placeholder="e.g., Why are leaves yellow?" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-300 focus:outline-none">
+                            <button id="ask-ai-button" class="btn btn-primary whitespace-nowrap">Ask AI</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+<script type="module">
+    import { GoogleGenerativeAI } from "@google/generative-ai";
+
+    document.addEventListener('DOMContentLoaded', () => {
+
+        const webcamVideo = document.getElementById('webcamVideo');
+        const capturedImage = document.getElementById('capturedImage');
+        const cameraButton = document.getElementById('cameraButton');
+        const cameraButtonText = document.getElementById('cameraButtonText');
+        const uploadInput = document.getElementById('uploadInput');
+        const analyzeButton = document.getElementById('analyzeButton');
+        const loader = document.getElementById('loader');
+        const cameraStatus = document.getElementById('cameraStatus');
+        const humidityEl = document.getElementById('humidity');
+        const temperatureEl = document.getElementById('temperature');
+        const soilMoistureEl = document.getElementById('soilMoisture');
+        const pumpStatusDisplay = document.getElementById('pumpStatusDisplay');
+        const leafAnalysisResults = document.getElementById('leaf-analysis-results');
+        const diagnosisResult = document.getElementById('diagnosis-result');
+        const aiQuestionInput = document.getElementById('ai-question');
+        const askAIButton = document.getElementById('ask-ai-button');
+        const aiAnswer = document.getElementById('ai-answer');
+        
+        const tabs = {
+            analysis: { btn: document.getElementById('tab-analysis'), content: document.getElementById('content-analysis') },
+            diagnosis: { btn: document.getElementById('tab-diagnosis'), content: document.getElementById('content-diagnosis') },
+            ai: { btn: document.getElementById('tab-ai'), content: document.getElementById('content-ai') }
+        };
+
+
+        let stream;
+        let imageClassifier;
+        let genAI;
+        const API_KEY = "AIzaSyCfcajex2bOkpVk1v_oJtxqbDUCFaiDm0w";
+        const TM_URL = "https://teachablemachine.withgoogle.com/models/DQjZ3_KaK/";
+        const THINGSPEAK_CHANNEL_ID = 3014588;
+
+   
+        function showLiveFeed() {
+            webcamVideo.classList.remove('hidden');
+            capturedImage.classList.add('hidden');
+            cameraButtonText.textContent = 'Capture';
+            analyzeButton.disabled = true;
+        }
+
+        function showCapturedImage() {
+            webcamVideo.classList.add('hidden');
+            capturedImage.classList.remove('hidden');
+            cameraButtonText.textContent = 'Use Live Camera';
+            if (imageClassifier) {
+                analyzeButton.disabled = false;
+            }
+        }
+
+        async function initCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+                webcamVideo.srcObject = stream;
+                await new Promise(resolve => webcamVideo.onloadedmetadata = resolve);
+                showLiveFeed();
+                cameraButton.disabled = false;
+                cameraStatus.textContent = '';
+            } catch (err) {
+                console.error("Camera Error:", err);
+                cameraStatus.textContent = 'Camera access denied. Please grant permission.';
+                capturedImage.src = 'https://placehold.co/800x600/e2e8f0/ef4444?text=Camera+Error';
+                showCapturedImage();
+                cameraButton.disabled = true;
+            }
+        }
+
+        async function loadImageClassifier() {
+            try {
+                imageClassifier = await tmImage.load(TM_URL + "model.json", TM_URL + "metadata.json");
+                console.log("Image classifier loaded");
+                if (!capturedImage.classList.contains('hidden') && !capturedImage.src.includes('placehold.co')) {
+                    analyzeButton.disabled = false;
+                }
+            } catch (error) {
+                console.error("Image Model Load Error:", error);
+                cameraStatus.textContent = 'Failed to load image AI model.';
+            }
+        }
+        
+        function captureImageFrame() {
+            if (!stream || !webcamVideo) return;
+            const canvas = document.createElement('canvas');
+            canvas.width = webcamVideo.videoWidth;
+            canvas.height = webcamVideo.videoHeight;
+            canvas.getContext('2d').drawImage(webcamVideo, 0, 0);
+            capturedImage.src = canvas.toDataURL('image/png');
+            showCapturedImage();
+        }
+
+        async function getGeminiVisionAnalysis(imageDataUrl) {
+            if (!genAI) {
+                console.error("Gemini AI not initialized. Please provide an API key.");
+                return { isPlantVisible: false, summary: "AI not configured." };
+            }
+
+            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+            const imagePart = dataUrlToGenerativePart(imageDataUrl, 'image/png');
+
+            if (!imagePart) {
+                return { isPlantVisible: false, summary: "No valid image provided." };
+            }
+
+            const prompt = `Analyze the provided image. Determine if a real plant or leaf is the main subject. Provide a brief, one-sentence summary of the plant's visual health. Respond in JSON format with keys: "isPlantVisible" (boolean) and "summary" (string).`;
+            
+            try {
+                 const result = await model.generateContent([prompt, imagePart]);
+                 const response = result.response;
+                 const text = response.text().replace(/```json\n?|```/g, '').trim();
+                 return JSON.parse(text);
+            } catch(e) {
+                console.error("Gemini Vision Error:", e);
+                return { isPlantVisible: false, summary: "Error analyzing image with AI." };
+            }
+        }
+
+        async function runFullAnalysis() {
+            if (capturedImage.src.includes('placehold.co') || !imageClassifier) {
+                cameraStatus.textContent = "Please capture or upload a valid image first.";
+                return;
+            }
+
+            analyzeButton.disabled = true;
+            analyzeButton.innerHTML = `<div class="spinner !w-5 !h-5 !border-2"></div> Diagnosing...`;
+            
+            leafAnalysisResults.innerHTML = `<div class="flex items-center justify-center gap-2 text-gray-500"><div class="spinner !w-5 !h-5 !border-2"></div><p>Running multi-source analysis...</p></div>`;
+            diagnosisResult.innerHTML = `<div class="flex items-center justify-center gap-2 text-gray-500"><div class="spinner !w-5 !h-5 !border-2"></div><p>Awaiting results...</p></div>`;
+
+            const [tmPrediction, sensorData, geminiAnalysis] = await Promise.all([
+                imageClassifier.predict(capturedImage),
+                fetchSensorData(),
+                getGeminiVisionAnalysis(capturedImage.src)
+            ]);
+            
+            displayLeafAnalysis(tmPrediction);
+            const topTmPrediction = [...tmPrediction].sort((a,b) => b.probability - a.probability)[0];
+            
+            generateDiagnosis(topTmPrediction, sensorData, geminiAnalysis);
+            
+            switchTab('diagnosis');
+            
+            analyzeButton.disabled = false;
+            analyzeButton.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z" /><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a4 4 0 00-3.446 6.032l-2.261 2.26a1 1 0 101.414 1.414l2.26-2.26A4 4 0 1011 5z" clip-rule="evenodd" /></svg> Run Diagnosis`;
+        }
+        
+        function generateDiagnosis(tmPrediction, sensors, geminiAnalysis) {
+            let status = 'Analysis Complete';
+            let problem = '';
+            let solution = '';
+            let combinedAnalysis = '';
+
+            if (!geminiAnalysis.isPlantVisible) {
+                status = 'Image Unclear';
+                problem = `The AI could not clearly identify a plant in the image.`;
+                if (sensors) {
+                    combinedAnalysis = `The current environmental readings are: Temperature: ${sensors.temperature}°C, Humidity: ${sensors.humidity}%, Soil Moisture: ${sensors.soil}%.`;
+                }
+                solution = `For an accurate diagnosis, please capture or upload a new, clear photo where the plant's leaves are the main subject.`;
+            } else {
+                const tmClassName = tmPrediction.className;
+                const tmConfidence = tmPrediction.probability;
+                combinedAnalysis = `The initial model suggests a high probability of <strong>${tmClassName}</strong>. The Gemini AI vision analysis adds: "<em>${geminiAnalysis.summary}</em>".`;
+
+                if (tmClassName.toLowerCase() === 'leaf spot' && tmConfidence > 0.6) {
+                    status = 'Diseased';
+                    problem = `High probability of <strong>Leaf Spot</strong> detected.`;
+                    solution = "1. Isolate the plant to prevent spreading. <br>2. Prune and destroy affected leaves. Do not compost them. <br>3. Improve air circulation and avoid overhead watering. <br>4. Apply a copper-based or sulfur-based fungicide according to package directions.";
+                    if (sensors && sensors.humidity > 70) {
+                        solution += "<br>5. The high humidity may be contributing; try to increase airflow."
+                    }
+                } else if (sensors && sensors.soil < 30) {
+                    status = 'Needs Water';
+                    problem = "Soil is very dry.";
+                    solution = "Water the plant thoroughly until it drains from the bottom. Consider watering more frequently or checking if the plant is root-bound and needs repotting.";
+                } else if (sensors && sensors.soil > 80) {
+                    status = 'Overwatered';
+                    problem = "Soil is waterlogged.";
+                    solution = "Stop watering immediately. Ensure the pot has proper drainage holes. Allow the top 2-3 inches of soil to dry out completely before watering again to prevent root rot.";
+                } else if (tmClassName.toLowerCase() === 'healthy' && tmConfidence > 0.6) {
+                    status = 'Healthy';
+                    problem = "Conditions appear optimal.";
+                    solution = "Your plant looks healthy. Continue monitoring its environment and stick to your care routine. Ensure it gets adequate light and nutrients. Well done!";
+                } else {
+                    status = 'Needs Review';
+                    problem = `Mixed signals detected. Primary model suggests <strong>${tmClassName}</strong>.`;
+                    solution = `Please review the combined analysis and sensor data. The AI's visual summary can provide extra clues. If the plant seems unwell, consider isolating it and checking for common pests or nutrient deficiencies.`;
+                }
+            }
+            
+            const statusColor = status === 'Healthy' ? 'bg-green-100 text-green-800' : (status === 'Image Unclear' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-100 text-yellow-800');
+            diagnosisResult.innerHTML = `
+                <div class="space-y-4 text-left w-full">
+                    <div>
+                        <span class="text-xs font-semibold uppercase px-2 py-1 rounded-full ${statusColor}">${status}</span>
+                    </div>
+                    <h4 class="text-xl font-bold text-gray-800">${problem}</h4>
+                    <div class="text-sm text-gray-600 p-3 bg-gray-50 rounded-lg">
+                        <p class="font-semibold mb-1">Combined AI Analysis:</p>
+                        <p>${combinedAnalysis}</p>
+                    </div>
+                    <div class="text-gray-600 text-sm space-y-2">
+                        <p class="font-semibold">Recommended Care Plan:</p>
+                        <p>${solution}</p>
+                    </div>
+                </div>`;
+        }
+
+        function displayLeafAnalysis(predictions) {
+            leafAnalysisResults.innerHTML = '';
+            predictions.forEach(p => {
+                const percent = (p.probability * 100).toFixed(1);
+                const resultEl = document.createElement('div');
+                resultEl.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="font-medium text-gray-700">${p.className}</span>
+                        <span class="text-gray-500">${percent}%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-bar-fill" style="width: ${percent}%;"></div>
+                    </div>
+                `;
+                leafAnalysisResults.appendChild(resultEl);
+            });
+        }
+        
+        async function fetchSensorData() {
+            try {
+                const res = await fetch(`https://api.thingspeak.com/channels/${THINGSPEAK_CHANNEL_ID}/feeds.json?results=1`);
+                const data = await res.json();
+                if (data.feeds && data.feeds.length > 0) {
+                    const feed = data.feeds[0];
+                    const sensorValues = {
+                        humidity: parseFloat(feed.field1 || 0).toFixed(1),
+                        temperature: parseFloat(feed.field2 || 0).toFixed(1),
+                        soil: parseFloat(feed.field3 || 0).toFixed(1),
+                        pump: parseInt(feed.field4 || 0)
+                    };
+                    humidityEl.textContent = `${sensorValues.humidity}%`;
+                    temperatureEl.textContent = `${sensorValues.temperature}°C`;
+                    soilMoistureEl.textContent = `${sensorValues.soil}%`;
+                    pumpStatusDisplay.classList.remove('hidden');
+                    pumpStatusDisplay.textContent = `Pump: ${sensorValues.pump === 1 ? 'ON' : 'OFF'}`;
+                    pumpStatusDisplay.className = `px-3 py-1 rounded-full text-sm font-semibold ${sensorValues.pump === 1 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`;
+                    return sensorValues;
+                }
+            } catch (error) {
+                console.error("ThingSpeak Error:", error);
+                humidityEl.textContent = 'Error';
+            }
+            return null;
+        }
+        
+        function dataUrlToGenerativePart(dataUrl, mimeType) {
+            if (!dataUrl || dataUrl.includes('placehold.co')) {
+                return null;
+            }
+            return { inlineData: { data: dataUrl.split(',')[1], mimeType } };
+        }
+
+        async function getAIAnswer() {
+            if (!genAI) {
+                aiAnswer.innerHTML = `<p class="text-red-600">AI Assistant is not configured. Please add an API key.</p>`;
+                return;
+            }
+            const question = aiQuestionInput.value.trim();
+            if (!question) {
+                aiAnswer.innerHTML = `<p>Please enter a question.</p>`;
+                return;
+            }
+
+            aiAnswer.innerHTML = `<div class="flex items-center gap-2 text-gray-500"><div class="spinner !w-4 !h-4 !border-2"></div><span>AI is thinking...</span></div>`;
+            askAIButton.disabled = true;
+
+            try {
+                const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+                const imagePart = dataUrlToGenerativePart(capturedImage.src, 'image/png');
+                const temp = temperatureEl.textContent;
+                const humidity = humidityEl.textContent;
+                const soil = soilMoistureEl.textContent;
+                const sensorContext = `Current environmental data is: Temperature: ${temp}, Humidity: ${humidity}, Soil Moisture: ${soil}.`;
+                
+                const promptParts = [];
+                const systemPrompt = `You are an expert AI botanist. Your task is to provide a comprehensive, actionable answer to the user's question by analyzing the provided plant image and sensor data.
+
+                **Analysis Steps:**
+                1.  **Image Analysis:** Examine the leaf color, texture, spots, damage, and overall plant health from the image.
+                2.  **Sensor Data Analysis:** Incorporate this context: ${sensorContext}.
+                3.  **Synthesize:** Combine visual, sensor, and user query information for a holistic recommendation.
+
+                **Response Guidelines:**
+                -   If the image is sufficient, give a direct, specific answer.
+                -   If the image is insufficient, state exactly what you need (e.g., "For a precise recommendation, please capture a new image showing the base of the plant."). Then, provide a general answer.
+                -   Keep answers concise, practical, and under 80 words.
+
+                User's question: "${question}"`;
+                
+                promptParts.push(systemPrompt);
+                if (imagePart) {
+                    promptParts.push(imagePart);
+                }
+                
+                const result = await model.generateContent(promptParts);
+                const response = result.response;
+                const text = response.text();
+                aiAnswer.innerHTML = `<p>${text.replace(/\n/g, '<br>')}</p>`;
+            } catch (error) {
+                console.error("AI Assistant Error:", error);
+                aiAnswer.innerHTML = `<p class="text-red-600">An error occurred with the AI Assistant. Please check the console.</p>`;
+            } finally {
+                askAIButton.disabled = false;
+            }
+        }
+        
+        function switchTab(tabKey) {
+            Object.values(tabs).forEach(tab => {
+                tab.btn.classList.remove('active');
+                tab.content.classList.remove('active');
+            });
+            tabs[tabKey].btn.classList.add('active');
+            tabs[tabKey].content.classList.add('active');
+        }
+
+        cameraButton.addEventListener('click', () => {
+            if (webcamVideo.classList.contains('hidden')) { showLiveFeed(); } 
+            else { captureImageFrame(); }
+        });
+
+        uploadInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    capturedImage.src = e.target.result;
+                    showCapturedImage();
+                    if (!loader.classList.contains('hidden')) {
+                        loader.classList.add('hidden');
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        analyzeButton.addEventListener('click', runFullAnalysis);
+        askAIButton.addEventListener('click', getAIAnswer);
+        aiQuestionInput.addEventListener('keyup', e => { if (e.key === 'Enter') getAIAnswer(); });
+        Object.keys(tabs).forEach(key => { tabs[key].btn.addEventListener('click', () => switchTab(key)); });
+
+        async function initializeApp() {
+            if (API_KEY) {
+                genAI = new GoogleGenerativeAI(API_KEY);
+            } else {
+                cameraStatus.textContent = 'Google API Key not provided. AI features disabled.';
+            }
+
+            await Promise.all([ loadImageClassifier(), initCamera(), fetchSensorData() ]);
+            loader.classList.add('hidden');
+            setInterval(fetchSensorData, 30000);
+        }
+
+        initializeApp();
+    });
+</script>
+</body>
+</html>
