@@ -60,7 +60,6 @@
                         <p>Initializing Camera & AI...</p>
                     </div>
                 </div>
-                <!-- === MODIFIED BUTTONS & LAYOUT START === -->
                 <div class="flex flex-col gap-3 mt-2">
                     <button id="cameraButton" class="btn btn-primary w-full" disabled>
                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.414-1.414A1 1 0 0011.586 3H8.414a1 1 0 00-.707.293L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clip-rule="evenodd" /></svg>
@@ -76,8 +75,7 @@
                     <input type="file" id="uploadInput" class="hidden" accept="image/*">
                 </div>
                  <p id="cameraStatus" class="text-sm text-center text-gray-500 h-5"></p>
-                 <!-- === MODIFIED BUTTONS & LAYOUT END === -->
-            </div>
+                 </div>
 
             <div class="right-panel panel flex flex-col">
                 <nav class="flex border-b border-gray-200 -mt-2">
@@ -137,7 +135,6 @@
         const cameraButton = document.getElementById('cameraButton');
         const cameraButtonText = document.getElementById('cameraButtonText');
         const uploadInput = document.getElementById('uploadInput');
-        // No analyzeButton anymore
         const loader = document.getElementById('loader');
         const cameraStatus = document.getElementById('cameraStatus');
         const humidityEl = document.getElementById('humidity');
@@ -213,7 +210,7 @@
             canvas.getContext('2d').drawImage(webcamVideo, 0, 0);
             capturedImage.src = canvas.toDataURL('image/png');
             showCapturedImage();
-            runFullAnalysis(); // <<< Auto-run diagnosis
+            runFullAnalysis();
         }
 
         async function getGeminiVisionAnalysis(imageDataUrl) {
@@ -244,7 +241,6 @@
                 return;
             }
             
-            // Show loading state
             cameraStatus.innerHTML = `<div class="flex items-center justify-center gap-2"><div class="spinner !w-4 !h-4 !border-2"></div><span>Running Diagnosis...</span></div>`;
             leafAnalysisResults.innerHTML = `<div class="flex items-center justify-center gap-2 text-gray-500"><div class="spinner !w-5 !h-5 !border-2"></div><p>Running multi-source analysis...</p></div>`;
             diagnosisResult.innerHTML = `<div class="flex items-center justify-center gap-2 text-gray-500"><div class="spinner !w-5 !h-5 !border-2"></div><p>Awaiting results...</p></div>`;
@@ -262,7 +258,6 @@
             
             switchTab('diagnosis');
             
-            // Clear loading state
             cameraStatus.innerHTML = '';
         }
         
@@ -276,13 +271,12 @@
                 status = 'Image Unclear';
                 problem = `The AI could not clearly identify a plant in the image.`;
                 if (sensors) {
-                    combinedAnalysis = `The current environmental readings are: Temperature: ${sensors.temperature}°C, Humidity: ${sensors.humidity}%, Soil Moisture: ${sensors.soil}%.`;
+                    combinedAnalysis = `The current environmental readings are: Temperature: ${sensors.temperature.toFixed(1)}°C, Humidity: ${sensors.humidity.toFixed(1)}%, Soil Moisture: ${sensors.soil.toFixed(1)}%.`;
                 }
                 solution = `For an accurate diagnosis, please capture or upload a new, clear photo where the plant's leaves are the main subject.`;
             } else {
                 const tmClassName = tmPrediction.className;
                 const tmConfidence = tmPrediction.probability;
-                // AI vision analysis (no "Gemini" mention)
                 combinedAnalysis = `The initial model suggests a high probability of <strong>${tmClassName}</strong>. The advanced vision analysis adds: "<em>${geminiAnalysis.summary}</em>".`;
 
                 if (tmClassName.toLowerCase() === 'leaf spot' && tmConfidence > 0.6) {
@@ -347,31 +341,47 @@
             });
         }
         
+        // --- FIXED SENSOR FETCHING FUNCTION ---
         async function fetchSensorData() {
             try {
                 const res = await fetch(`https://api.thingspeak.com/channels/${THINGSPEAK_CHANNEL_ID}/feeds.json?results=1`);
+                if (!res.ok) {
+                    throw new Error(`ThingSpeak API request failed with status ${res.status}`);
+                }
                 const data = await res.json();
-                if (data.feeds && data.feeds.length > 0) {
+                if (data && data.feeds && data.feeds.length > 0) {
                     const feed = data.feeds[0];
+                    
                     const sensorValues = {
-                        humidity: parseFloat(feed.field1 || 0).toFixed(1),
-                        temperature: parseFloat(feed.field2 || 0).toFixed(1),
-                        soil: parseFloat(feed.field3 || 0).toFixed(1),
-                        pump: parseInt(feed.field4 || 0)
+                        humidity: parseFloat(feed.field1 || 0),
+                        temperature: parseFloat(feed.field2 || 0),
+                        soil: parseFloat(feed.field3 || 0),
+                        pump: parseInt(feed.field4 || 0, 10)
                     };
-                    humidityEl.textContent = `${sensorValues.humidity}%`;
-                    temperatureEl.textContent = `${sensorValues.temperature}°C`;
-                    soilMoistureEl.textContent = `${sensorValues.soil}%`;
+
+                    humidityEl.textContent = `${sensorValues.humidity.toFixed(1)}%`;
+                    temperatureEl.textContent = `${sensorValues.temperature.toFixed(1)}°C`;
+                    soilMoistureEl.textContent = `${sensorValues.soil.toFixed(1)}%`;
+                    
                     pumpStatusDisplay.classList.remove('hidden');
                     pumpStatusDisplay.textContent = `Pump: ${sensorValues.pump === 1 ? 'ON' : 'OFF'}`;
                     pumpStatusDisplay.className = `px-3 py-1 rounded-full text-sm font-semibold ${sensorValues.pump === 1 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`;
+
                     return sensorValues;
+                } else {
+                    console.warn("ThingSpeak returned no feeds.");
+                    humidityEl.textContent = 'N/A';
+                    temperatureEl.textContent = 'N/A';
+                    soilMoistureEl.textContent = 'N/A';
+                    return null;
                 }
             } catch (error) {
                 console.error("ThingSpeak Error:", error);
                 humidityEl.textContent = 'Error';
+                temperatureEl.textContent = 'Error';
+                soilMoistureEl.textContent = 'Error';
+                return null;
             }
-            return null;
         }
         
         function dataUrlToGenerativePart(dataUrl, mimeType) {
@@ -401,10 +411,8 @@
                 const temp = temperatureEl.textContent;
                 const humidity = humidityEl.textContent;
                 const soil = soilMoistureEl.textContent;
-                const sensorContext = `Current environmental data is: Temperature: ${temp}, Humidity: ${humidity}, Soil Moisture: ${soil}.`;
                 
                 const promptParts = [];
-                // Refined prompt to avoid self-reference
                 const systemPrompt = `You are an expert AI botanist. Your task is to provide a comprehensive, actionable answer to the user's question by analyzing the provided plant image and sensor data.
 
                 **Response Guidelines:**
@@ -412,6 +420,7 @@
                 - If the image is insufficient, state exactly what you need to see.
                 - Keep answers concise, practical, and under 80 words.
                 - Do not mention that you are an AI model or refer to yourself.
+                - Current environmental data is: Temperature: ${temp}, Humidity: ${humidity}, Soil Moisture: ${soil}.
 
                 User's question: "${question}"`;
                 
@@ -457,13 +466,12 @@
                     if (!loader.classList.contains('hidden')) {
                         loader.classList.add('hidden');
                     }
-                    runFullAnalysis(); // <<< Auto-run diagnosis
+                    runFullAnalysis();
                 };
                 reader.readAsDataURL(file);
             }
         });
 
-        // No event listener for analyzeButton anymore
         askAIButton.addEventListener('click', getAIAnswer);
         aiQuestionInput.addEventListener('keyup', e => { if (e.key === 'Enter') getAIAnswer(); });
         Object.keys(tabs).forEach(key => { tabs[key].btn.addEventListener('click', () => switchTab(key)); });
@@ -478,7 +486,7 @@
 
             await Promise.all([ loadImageClassifier(), initCamera(), fetchSensorData() ]);
             loader.classList.add('hidden');
-            setInterval(fetchSensorData, 30000);
+            setInterval(fetchSensorData, 30000); // Periodically update sensor data every 30 seconds
         }
 
         initializeApp();
