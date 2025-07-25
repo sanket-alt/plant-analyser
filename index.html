@@ -129,7 +129,6 @@
     import { GoogleGenerativeAI } from "@google/generative-ai";
 
     document.addEventListener('DOMContentLoaded', () => {
-        // --- Element References ---
         const webcamVideo = document.getElementById('webcamVideo');
         const capturedImage = document.getElementById('capturedImage');
         const cameraButton = document.getElementById('cameraButton');
@@ -152,16 +151,13 @@
             diagnosis: { btn: document.getElementById('tab-diagnosis'), content: document.getElementById('content-diagnosis') },
             ai: { btn: document.getElementById('tab-ai'), content: document.getElementById('content-ai') }
         };
-
-        // --- State and Config ---
         let stream;
         let imageClassifier;
         let genAI;
-        const API_KEY = "AIzaSyCfcajex2bOkpVk1v_oJtxqbDUCFaiDm0w"; // IMPORTANT: PASTE YOUR GOOGLE API KEY HERE
+        const API_KEY = "AIzaSyCfcajex2bOkpVk1v_oJtxqbDUCFaiDm0w";
         const TM_URL = "https://teachablemachine.withgoogle.com/models/DQjZ3_KaK/";
         const THINGSPEAK_CHANNEL_ID = 3014588;
 
-        // --- View Management ---
         function showLiveFeed() {
             webcamVideo.classList.remove('hidden');
             capturedImage.classList.add('hidden');
@@ -174,7 +170,6 @@
             cameraButtonText.textContent = 'Use Live Camera';
         }
 
-        // --- Core Functions ---
         async function initCamera() {
             try {
                 stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
@@ -341,7 +336,6 @@
             });
         }
         
-        // --- FIXED SENSOR FETCHING FUNCTION ---
         async function fetchSensorData() {
             try {
                 const res = await fetch(`https://api.thingspeak.com/channels/${THINGSPEAK_CHANNEL_ID}/feeds.json?results=1`);
@@ -450,7 +444,6 @@
             tabs[tabKey].content.classList.add('active');
         }
 
-        // --- Event Listeners ---
         cameraButton.addEventListener('click', () => {
             if (webcamVideo.classList.contains('hidden')) { showLiveFeed(); } 
             else { captureImageFrame(); }
@@ -476,7 +469,6 @@
         aiQuestionInput.addEventListener('keyup', e => { if (e.key === 'Enter') getAIAnswer(); });
         Object.keys(tabs).forEach(key => { tabs[key].btn.addEventListener('click', () => switchTab(key)); });
 
-        // --- Initialization ---
         async function initializeApp() {
             if (API_KEY) {
                 genAI = new GoogleGenerativeAI(API_KEY);
@@ -486,7 +478,7 @@
 
             await Promise.all([ loadImageClassifier(), initCamera(), fetchSensorData() ]);
             loader.classList.add('hidden');
-            setInterval(fetchSensorData, 30000); // Periodically update sensor data every 30 seconds
+            setInterval(fetchSensorData, 30000);
         }
 
         initializeApp();
