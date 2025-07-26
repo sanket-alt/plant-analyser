@@ -27,13 +27,10 @@
         .tab-button.active { color: #10b981; border-bottom-color: #10b981; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
-        .progress-bar { background-color: #e5e7eb; border-radius: 0.5rem; overflow: hidden; height: 1.25rem; }
-        .progress-bar-fill { background-color: #10b981; height: 100%; transition: width 0.5s ease-in-out; text-align: right; padding-right: 0.5rem; color: white; font-size: 0.75rem; line-height: 1.25rem; }
         .spinner { width: 32px; height: 32px; border: 4px solid #e5e7eb; border-left-color: #10b981; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .prose { max-width: none; } .prose ul { list-style-type: disc; padding-left: 1.25rem; } .prose ol { list-style-type: decimal; padding-left: 1.25rem; }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
     
     <script type="importmap">
       {
@@ -87,8 +84,8 @@
                 <div class="flex-grow pt-4 overflow-y-auto">
                     <div id="content-analysis" class="tab-content active space-y-4">
                         <div>
-                            <h3 class="font-semibold text-gray-700 mb-2">Leaf Condition Analysis</h3>
-                            <div id="leaf-analysis-results" class="space-y-3 text-sm p-3 bg-gray-50 rounded-lg">
+                            <h3 class="font-semibold text-gray-700 mb-2">AI Summary</h3>
+                            <div id="leaf-analysis-results" class="space-y-3 text-sm p-3 bg-gray-50 rounded-lg min-h-[80px]">
                                 <p class="text-gray-500">Capture or upload an image to start diagnosis.</p>
                             </div>
                         </div>
@@ -103,7 +100,7 @@
                     </div>
 
                     <div id="content-diagnosis" class="tab-content">
-                         <div id="diagnosis-result" class="p-4 bg-gray-50 rounded-lg min-h-[200px] flex items-center justify-center text-gray-500">
+                         <div id="diagnosis-result" class="p-4 bg-white rounded-lg min-h-[200px] flex items-center justify-center text-gray-500">
                             <p>Diagnosis and care recommendations will appear here.</p>
                         </div>
                     </div>
@@ -111,7 +108,7 @@
                     <div id="content-ai" class="tab-content flex flex-col gap-4 h-full">
                         <div class="flex-grow p-4 bg-gray-50 rounded-lg space-y-2 overflow-y-auto">
                             <p class="font-semibold text-gray-700">Live AI Plant Assistant</p>
-                             <div id="ai-answer" class="text-gray-600">
+                             <div id="ai-answer" class="text-gray-600 prose prose-sm">
                                 <p>Ask a question about plant care, and the AI will answer.</p>
                             </div>
                         </div>
@@ -152,10 +149,9 @@
             ai: { btn: document.getElementById('tab-ai'), content: document.getElementById('content-ai') }
         };
         let stream;
-        let imageClassifier;
         let genAI;
-        const API_KEY = "AIzaSyCfcajex2bOkpVk1v_oJtxqbDUCFaiDm0w";
-        const TM_URL = "https://teachablemachine.withgoogle.com/models/DQjZ3_KaK/";
+        // IMPORTANT: Replace with your actual Google AI API Key
+        const API_KEY = "AIzaSyDsUenaZCcEv-bHcSB1ktZFTuEIBHnvtRg"; 
         const THINGSPEAK_CHANNEL_ID = 3014588;
 
         function showLiveFeed() {
@@ -186,16 +182,6 @@
                 cameraButton.disabled = true;
             }
         }
-
-        async function loadImageClassifier() {
-            try {
-                imageClassifier = await tmImage.load(TM_URL + "model.json", TM_URL + "metadata.json");
-                console.log("Image classifier loaded");
-            } catch (error) {
-                console.error("Image Model Load Error:", error);
-                cameraStatus.innerHTML = '<span class="text-red-600">Failed to load image AI model.</span>';
-            }
-        }
         
         function captureImageFrame() {
             if (!stream || !webcamVideo) return;
@@ -208,140 +194,93 @@
             runFullAnalysis();
         }
 
-        async function getGeminiVisionAnalysis(imageDataUrl) {
-            if (!genAI) {
-                console.error("Gemini AI not initialized. Please provide an API key.");
-                return { isPlantVisible: false, summary: "AI not configured." };
-            }
+        async function getFullGeminiDiagnosis(imageDataUrl, sensorData) {
+            if (!genAI) return { error: "AI not configured. Add your API key." };
+            if (!imageDataUrl || imageDataUrl.includes('placehold.co')) return { error: "No valid image provided." };
+
             const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-            const imagePart = dataUrlToGenerativePart(imageDataUrl, 'image/png');
-            if (!imagePart) {
-                return { isPlantVisible: false, summary: "No valid image provided." };
-            }
-            const prompt = `Analyze the provided image. Determine if a real plant or leaf is the main subject. Provide a brief, one-sentence summary of the plant's visual health. Respond in JSON format with keys: "isPlantVisible" (boolean) and "summary" (string).`;
+            const imagePart = { inlineData: { data: imageDataUrl.split(',')[1], mimeType: 'image/png' } };
+
+            const sensorInfo = sensorData 
+                ? `Current environmental data is: Temperature: ${sensorData.temperature.toFixed(1)}°C, Humidity: ${sensorData.humidity.toFixed(1)}%, Soil Moisture: ${sensorData.soil.toFixed(1)}%.`
+                : "No sensor data is available.";
+
+            const prompt = `Analyze the provided image of a plant leaf and the accompanying sensor data. 
+            ${sensorInfo}
+            
+            Respond in a valid JSON format with the following keys:
+            - "status": A single word status (e.g., "Healthy", "Diseased", "Needs Water", "Image Unclear").
+            - "problem": A short (2-5 word) title for the diagnosed issue.
+            - "analysis": A one or two-sentence detailed analysis combining the visual evidence from the image and sensor data.
+            - "recommendation": A numbered or bulleted list of actionable steps for a care plan. Use markdown for lists.
+
+            If the image is not a clear view of a plant leaf, set "status" to "Image Unclear" and provide guidance in the other fields.`;
+
             try {
-                 const result = await model.generateContent([prompt, imagePart]);
-                 const response = result.response;
-                 const text = response.text().replace(/```json\n?|```/g, '').trim();
-                 return JSON.parse(text);
-            } catch(e) {
-                console.error("Vision AI Error:", e);
-                return { isPlantVisible: false, summary: "Error analyzing image with AI." };
+                const result = await model.generateContent([prompt, imagePart]);
+                const response = result.response;
+                const text = response.text().replace(/```json\n?|```/g, '').trim();
+                return JSON.parse(text);
+            } catch (e) {
+                console.error("Full Gemini Diagnosis Error:", e);
+                return { error: "Failed to get a diagnosis from the AI. Check console for details." };
             }
         }
 
         async function runFullAnalysis() {
-            if (capturedImage.src.includes('placehold.co') || !imageClassifier) {
+            if (capturedImage.src.includes('placehold.co')) {
                 cameraStatus.innerHTML = '<span class="text-red-600">Please capture or upload an image first.</span>';
                 return;
             }
             
             cameraStatus.innerHTML = `<div class="flex items-center justify-center gap-2"><div class="spinner !w-4 !h-4 !border-2"></div><span>Running Diagnosis...</span></div>`;
-            leafAnalysisResults.innerHTML = `<div class="flex items-center justify-center gap-2 text-gray-500"><div class="spinner !w-5 !h-5 !border-2"></div><p>Running multi-source analysis...</p></div>`;
-            diagnosisResult.innerHTML = `<div class="flex items-center justify-center gap-2 text-gray-500"><div class="spinner !w-5 !h-5 !border-2"></div><p>Awaiting results...</p></div>`;
-            
-            const [tmPrediction, sensorData, geminiAnalysis] = await Promise.all([
-                imageClassifier.predict(capturedImage),
-                fetchSensorData(),
-                getGeminiVisionAnalysis(capturedImage.src)
-            ]);
-            
-            displayLeafAnalysis(tmPrediction);
-            const topTmPrediction = [...tmPrediction].sort((a,b) => b.probability - a.probability)[0];
-            
-            generateDiagnosis(topTmPrediction, sensorData, geminiAnalysis);
-            
-            switchTab('diagnosis');
-            
-            cameraStatus.innerHTML = '';
-        }
-        
-        function generateDiagnosis(tmPrediction, sensors, geminiAnalysis) {
-            let status = 'Analysis Complete';
-            let problem = '';
-            let solution = '';
-            let combinedAnalysis = '';
+            leafAnalysisResults.innerHTML = `<div class="flex items-center justify-center gap-2 text-gray-500"><p>Requesting AI analysis...</p></div>`;
+            diagnosisResult.innerHTML = `<div class="flex items-center justify-center gap-2 text-gray-500"><div class="spinner !w-5 !h-5 !border-2"></div><p>Awaiting AI diagnosis...</p></div>`;
 
-            if (!geminiAnalysis.isPlantVisible) {
-                status = 'Image Unclear';
-                problem = `The AI could not clearly identify a plant in the image.`;
-                if (sensors) {
-                    combinedAnalysis = `The current environmental readings are: Temperature: ${sensors.temperature.toFixed(1)}°C, Humidity: ${sensors.humidity.toFixed(1)}%, Soil Moisture: ${sensors.soil.toFixed(1)}%.`;
-                }
-                solution = `For an accurate diagnosis, please capture or upload a new, clear photo where the plant's leaves are the main subject.`;
+            const sensorData = await fetchSensorData();
+            const diagnosis = await getFullGeminiDiagnosis(capturedImage.src, sensorData);
+
+            if (diagnosis.error) {
+                diagnosisResult.innerHTML = `<p class="text-red-600">${diagnosis.error}</p>`;
+                leafAnalysisResults.innerHTML = `<p class="text-red-500">Analysis failed.</p>`;
             } else {
-                const tmClassName = tmPrediction.className;
-                const tmConfidence = tmPrediction.probability;
-                combinedAnalysis = `The initial model suggests a high probability of <strong>${tmClassName}</strong>. The advanced vision analysis adds: "<em>${geminiAnalysis.summary}</em>".`;
+                leafAnalysisResults.innerHTML = `<p class="text-gray-700">${diagnosis.analysis || "No summary provided."}</p>`;
+                
+                const statusColor = diagnosis.status === 'Healthy' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
+                
+                // Using a simple regex to convert markdown lists to HTML for display
+                const recommendationHtml = (diagnosis.recommendation || "No recommendations.")
+                    .replace(/^\s*-\s/gm, '<li>')
+                    .replace(/^\s*\d+\.\s/gm, '<li>')
+                    .replace(/<li>/g, '</li><li>')
+                    .replace(/<\/li><li>/g, '</li><li>');
 
-                if (tmClassName.toLowerCase() === 'leaf spot' && tmConfidence > 0.6) {
-                    status = 'Diseased';
-                    problem = `High probability of <strong>Leaf Spot</strong> detected.`;
-                    solution = "1. Isolate the plant to prevent spreading. <br>2. Prune and destroy affected leaves. Do not compost them. <br>3. Improve air circulation and avoid overhead watering. <br>4. Apply a copper-based or sulfur-based fungicide according to package directions.";
-                    if (sensors && sensors.humidity > 70) {
-                        solution += "<br>5. The high humidity may be contributing; try to increase airflow."
-                    }
-                } else if (sensors && sensors.soil < 30) {
-                    status = 'Needs Water';
-                    problem = "Soil is very dry.";
-                    solution = "Water the plant thoroughly until it drains from the bottom. Consider watering more frequently or checking if the plant is root-bound and needs repotting.";
-                } else if (sensors && sensors.soil > 80) {
-                    status = 'Overwatered';
-                    problem = "Soil is waterlogged.";
-                    solution = "Stop watering immediately. Ensure the pot has proper drainage holes. Allow the top 2-3 inches of soil to dry out completely before watering again to prevent root rot.";
-                } else if (tmClassName.toLowerCase() === 'healthy' && tmConfidence > 0.6) {
-                    status = 'Healthy';
-                    problem = "Conditions appear optimal.";
-                    solution = "Your plant looks healthy. Continue monitoring its environment and stick to your care routine. Ensure it gets adequate light and nutrients. Well done!";
-                } else {
-                    status = 'Needs Review';
-                    problem = `Mixed signals detected. Primary model suggests <strong>${tmClassName}</strong>.`;
-                    solution = `Please review the combined analysis and sensor data. The AI's visual summary can provide extra clues. If the plant seems unwell, consider isolating it and checking for common pests or nutrient deficiencies.`;
-                }
+                diagnosisResult.innerHTML = `
+                    <div class="space-y-4 text-left w-full">
+                        <div>
+                            <span class="text-xs font-semibold uppercase px-2 py-1 rounded-full ${statusColor}">${diagnosis.status}</span>
+                        </div>
+                        <h4 class="text-xl font-bold text-gray-800">${diagnosis.problem}</h4>
+                        <div class="text-sm text-gray-600 p-3 bg-gray-100 rounded-lg">
+                            <p class="font-semibold mb-1">AI Analysis:</p>
+                            <p>${diagnosis.analysis}</p>
+                        </div>
+                        <div class="text-gray-600 text-sm space-y-2 prose">
+                            <p class="font-semibold">Recommended Care Plan:</p>
+                            <ul>${recommendationHtml}</ul>
+                        </div>
+                    </div>`;
             }
-            
-            const statusColor = status === 'Healthy' ? 'bg-green-100 text-green-800' : (status === 'Image Unclear' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-100 text-yellow-800');
-            diagnosisResult.innerHTML = `
-                <div class="space-y-4 text-left w-full">
-                    <div>
-                        <span class="text-xs font-semibold uppercase px-2 py-1 rounded-full ${statusColor}">${status}</span>
-                    </div>
-                    <h4 class="text-xl font-bold text-gray-800">${problem}</h4>
-                    <div class="text-sm text-gray-600 p-3 bg-gray-50 rounded-lg">
-                        <p class="font-semibold mb-1">Combined AI Analysis:</p>
-                        <p>${combinedAnalysis}</p>
-                    </div>
-                    <div class="text-gray-600 text-sm space-y-2">
-                        <p class="font-semibold">Recommended Care Plan:</p>
-                        <p>${solution}</p>
-                    </div>
-                </div>`;
-        }
 
-        function displayLeafAnalysis(predictions) {
-            leafAnalysisResults.innerHTML = '';
-            predictions.forEach(p => {
-                const percent = (p.probability * 100).toFixed(1);
-                const resultEl = document.createElement('div');
-                resultEl.innerHTML = `
-                    <div class="flex justify-between items-center mb-1">
-                        <span class="font-medium text-gray-700">${p.className}</span>
-                        <span class="text-gray-500">${percent}%</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-bar-fill" style="width: ${percent}%;"></div>
-                    </div>
-                `;
-                leafAnalysisResults.appendChild(resultEl);
-            });
+            switchTab('diagnosis');
+            cameraStatus.innerHTML = '';
         }
         
         async function fetchSensorData() {
             try {
                 const res = await fetch(`https://api.thingspeak.com/channels/${THINGSPEAK_CHANNEL_ID}/feeds.json?results=1`);
-                if (!res.ok) {
-                    throw new Error(`ThingSpeak API request failed with status ${res.status}`);
-                }
+                if (!res.ok) throw new Error(`ThingSpeak API request failed with status ${res.status}`);
+                
                 const data = await res.json();
                 if (data && data.feeds && data.feeds.length > 0) {
                     const feed = data.feeds[0];
@@ -364,9 +303,6 @@
                     return sensorValues;
                 } else {
                     console.warn("ThingSpeak returned no feeds.");
-                    humidityEl.textContent = 'N/A';
-                    temperatureEl.textContent = 'N/A';
-                    soilMoistureEl.textContent = 'N/A';
                     return null;
                 }
             } catch (error) {
@@ -378,13 +314,6 @@
             }
         }
         
-        function dataUrlToGenerativePart(dataUrl, mimeType) {
-            if (!dataUrl || dataUrl.includes('placehold.co')) {
-                return null;
-            }
-            return { inlineData: { data: dataUrl.split(',')[1], mimeType } };
-        }
-       
         async function getAIAnswer() {
             if (!genAI) {
                 aiAnswer.innerHTML = `<p class="text-red-600">AI Assistant is not configured. Please add an API key.</p>`;
@@ -401,17 +330,17 @@
 
             try {
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-                const imagePart = dataUrlToGenerativePart(capturedImage.src, 'image/png');
+                const imagePart = capturedImage.src.includes('placehold.co') ? null : { inlineData: { data: capturedImage.src.split(',')[1], mimeType: 'image/png' } };
+                
                 const temp = temperatureEl.textContent;
                 const humidity = humidityEl.textContent;
                 const soil = soilMoistureEl.textContent;
                 
                 const promptParts = [];
-                const systemPrompt = `You are an expert AI botanist. Your task is to provide a comprehensive, actionable answer to the user's question by analyzing the provided plant image and sensor data.
+                const systemPrompt = `You are an expert AI botanist. Your task is to provide a comprehensive, actionable answer to the user's question. If an image and sensor data are provided, use them for context.
 
                 **Response Guidelines:**
                 - Synthesize all available information (image, sensors, query) for a holistic recommendation.
-                - If the image is insufficient, state exactly what you need to see.
                 - Keep answers concise, practical, and under 80 words.
                 - Do not mention that you are an AI model or refer to yourself.
                 - Current environmental data is: Temperature: ${temp}, Humidity: ${humidity}, Soil Moisture: ${soil}.
@@ -470,15 +399,17 @@
         Object.keys(tabs).forEach(key => { tabs[key].btn.addEventListener('click', () => switchTab(key)); });
 
         async function initializeApp() {
-            if (API_KEY) {
+            if (API_KEY && API_KEY !== "YOUR_GOOGLE_AI_API_KEY") {
                 genAI = new GoogleGenerativeAI(API_KEY);
             } else {
                 cameraStatus.innerHTML = '<span class="text-red-600">Google API Key not provided. AI features disabled.</span>';
+                console.error("Google API Key not provided.");
             }
 
-            await Promise.all([ loadImageClassifier(), initCamera(), fetchSensorData() ]);
+            await Promise.all([ initCamera(), fetchSensorData() ]);
             loader.classList.add('hidden');
-            setInterval(fetchSensorData, 30000);
+            // Fetch sensor data every 30 seconds
+            setInterval(fetchSensorData, 30000); 
         }
 
         initializeApp();
