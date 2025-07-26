@@ -72,7 +72,7 @@
                     <input type="file" id="uploadInput" class="hidden" accept="image/*">
                 </div>
                  <p id="cameraStatus" class="text-sm text-center text-gray-500 h-5"></p>
-                 </div>
+            </div>
 
             <div class="right-panel panel flex flex-col">
                 <nav class="flex border-b border-gray-200 -mt-2">
@@ -84,7 +84,7 @@
                 <div class="flex-grow pt-4 overflow-y-auto">
                     <div id="content-analysis" class="tab-content active space-y-4">
                         <div>
-                            <h3 class="font-semibold text-gray-700 mb-2">AI Summary</h3>
+                            <h3 class="font-semibold text-gray-700 mb-2">Condition Analysis</h3>
                             <div id="leaf-analysis-results" class="space-y-3 text-sm p-3 bg-gray-50 rounded-lg min-h-[80px]">
                                 <p class="text-gray-500">Capture or upload an image to start diagnosis.</p>
                             </div>
@@ -101,7 +101,7 @@
 
                     <div id="content-diagnosis" class="tab-content">
                          <div id="diagnosis-result" class="p-4 bg-white rounded-lg min-h-[200px] flex items-center justify-center text-gray-500">
-                            <p>Diagnosis and care recommendations will appear here.</p>
+                            <p>Detailed diagnosis and care recommendations will appear here.</p>
                         </div>
                     </div>
 
@@ -205,16 +205,18 @@
                 ? `Current environmental data is: Temperature: ${sensorData.temperature.toFixed(1)}°C, Humidity: ${sensorData.humidity.toFixed(1)}%, Soil Moisture: ${sensorData.soil.toFixed(1)}%.`
                 : "No sensor data is available.";
 
-            const prompt = `Analyze the provided image of a plant leaf and the accompanying sensor data. 
+            const prompt = `Analyze the provided image of a plant leaf and sensor data. Respond in a valid JSON format only.
+            
             ${sensorInfo}
             
-            Respond in a valid JSON format with the following keys:
-            - "status": A single word status (e.g., "Healthy", "Diseased", "Needs Water", "Image Unclear").
+            Your JSON response must contain these keys:
+            - "status": A single word (e.g., "Healthy", "Diseased", "Needs Water", "Image Unclear").
             - "problem": A short (2-5 word) title for the diagnosed issue.
-            - "analysis": A one or two-sentence detailed analysis combining the visual evidence from the image and sensor data.
-            - "recommendation": A numbered or bulleted list of actionable steps for a care plan. Use markdown for lists.
+            - "analysis": A one or two-sentence detailed analysis.
+            - "recommendation": A numbered or bulleted list of actionable steps as a single string with '\\n' for new lines.
+            - "condition_analysis": An array of exactly 7 objects. Each object must have a "label" (string, e.g., "Leaf Discoloration") and a "value" (integer, 0-100) assessing severity. Choose labels dynamically based on the image. Example labels: "Leaf Vigor", "Hydration Level", "Fungal Presence", "Pest Damage", "Nutrient Deficiency", "Physical Damage", "Overall Health".
 
-            If the image is not a clear view of a plant leaf, set "status" to "Image Unclear" and provide guidance in the other fields.`;
+            If the image is not a clear view of a plant leaf, set "status" to "Image Unclear" and provide guidance.`;
 
             try {
                 const result = await model.generateContent([prompt, imagePart]);
@@ -234,7 +236,7 @@
             }
             
             cameraStatus.innerHTML = `<div class="flex items-center justify-center gap-2"><div class="spinner !w-4 !h-4 !border-2"></div><span>Running Diagnosis...</span></div>`;
-            leafAnalysisResults.innerHTML = `<div class="flex items-center justify-center gap-2 text-gray-500"><p>Requesting AI analysis...</p></div>`;
+            leafAnalysisResults.innerHTML = `<div class="flex items-center justify-center gap-2 text-gray-500"><div class="spinner !w-5 !h-5 !border-2"></div><p>Generating analysis...</p></div>`;
             diagnosisResult.innerHTML = `<div class="flex items-center justify-center gap-2 text-gray-500"><div class="spinner !w-5 !h-5 !border-2"></div><p>Awaiting AI diagnosis...</p></div>`;
 
             const sensorData = await fetchSensorData();
@@ -244,16 +246,36 @@
                 diagnosisResult.innerHTML = `<p class="text-red-600">${diagnosis.error}</p>`;
                 leafAnalysisResults.innerHTML = `<p class="text-red-500">Analysis failed.</p>`;
             } else {
-                leafAnalysisResults.innerHTML = `<p class="text-gray-700">${diagnosis.analysis || "No summary provided."}</p>`;
+                // Populate Analysis Tab with Progress Bars
+                leafAnalysisResults.innerHTML = ''; 
+                if (diagnosis.condition_analysis && Array.isArray(diagnosis.condition_analysis)) {
+                    diagnosis.condition_analysis.forEach(metric => {
+                        const resultEl = document.createElement('div');
+                        resultEl.className = 'space-y-1';
+                        resultEl.innerHTML = `
+                            <div class="flex justify-between items-center mb-1 text-sm">
+                                <span class="font-medium text-gray-700">${metric.label}</span>
+                                <span class="text-gray-500">${metric.value}%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                <div class="bg-emerald-500 h-2 rounded-full" style="width: ${metric.value}%"></div>
+                            </div>
+                        `;
+                        leafAnalysisResults.appendChild(resultEl);
+                    });
+                } else {
+                    leafAnalysisResults.innerHTML = `<p class="text-gray-500">${diagnosis.analysis || "AI summary will appear here."}</p>`;
+                }
                 
+                // Populate Diagnosis Tab
                 const statusColor = diagnosis.status === 'Healthy' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800';
                 
-                // Using a simple regex to convert markdown lists to HTML for display
-                const recommendationHtml = (diagnosis.recommendation || "No recommendations.")
-                    .replace(/^\s*-\s/gm, '<li>')
-                    .replace(/^\s*\d+\.\s/gm, '<li>')
-                    .replace(/<li>/g, '</li><li>')
-                    .replace(/<\/li><li>/g, '</li><li>');
+                let recommendationText = diagnosis.recommendation;
+                if (Array.isArray(recommendationText)) {
+                    recommendationText = recommendationText.join('\n');
+                }
+                const recommendationHtml = (String(recommendationText || "No recommendations."))
+                    .replace(/\n/g, '<br>');
 
                 diagnosisResult.innerHTML = `
                     <div class="space-y-4 text-left w-full">
@@ -262,12 +284,12 @@
                         </div>
                         <h4 class="text-xl font-bold text-gray-800">${diagnosis.problem}</h4>
                         <div class="text-sm text-gray-600 p-3 bg-gray-100 rounded-lg">
-                            <p class="font-semibold mb-1">AI Analysis:</p>
+                            <p class="font-semibold mb-1">AI Summary:</p>
                             <p>${diagnosis.analysis}</p>
                         </div>
                         <div class="text-gray-600 text-sm space-y-2 prose">
                             <p class="font-semibold">Recommended Care Plan:</p>
-                            <ul>${recommendationHtml}</ul>
+                            <div>${recommendationHtml}</div>
                         </div>
                     </div>`;
             }
@@ -284,22 +306,18 @@
                 const data = await res.json();
                 if (data && data.feeds && data.feeds.length > 0) {
                     const feed = data.feeds[0];
-                    
                     const sensorValues = {
                         humidity: parseFloat(feed.field1 || 0),
                         temperature: parseFloat(feed.field2 || 0),
                         soil: parseFloat(feed.field3 || 0),
                         pump: parseInt(feed.field4 || 0, 10)
                     };
-
                     humidityEl.textContent = `${sensorValues.humidity.toFixed(1)}%`;
                     temperatureEl.textContent = `${sensorValues.temperature.toFixed(1)}°C`;
                     soilMoistureEl.textContent = `${sensorValues.soil.toFixed(1)}%`;
-                    
                     pumpStatusDisplay.classList.remove('hidden');
                     pumpStatusDisplay.textContent = `Pump: ${sensorValues.pump === 1 ? 'ON' : 'OFF'}`;
                     pumpStatusDisplay.className = `px-3 py-1 rounded-full text-sm font-semibold ${sensorValues.pump === 1 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`;
-
                     return sensorValues;
                 } else {
                     console.warn("ThingSpeak returned no feeds.");
@@ -324,33 +342,24 @@
                 aiAnswer.innerHTML = `<p>Please enter a question.</p>`;
                 return;
             }
-
             aiAnswer.innerHTML = `<div class="flex items-center gap-2 text-gray-500"><div class="spinner !w-4 !h-4 !border-2"></div><span>AI is thinking...</span></div>`;
             askAIButton.disabled = true;
 
             try {
                 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
                 const imagePart = capturedImage.src.includes('placehold.co') ? null : { inlineData: { data: capturedImage.src.split(',')[1], mimeType: 'image/png' } };
-                
                 const temp = temperatureEl.textContent;
                 const humidity = humidityEl.textContent;
                 const soil = soilMoistureEl.textContent;
-                
                 const promptParts = [];
-                const systemPrompt = `You are an expert AI botanist. Your task is to provide a comprehensive, actionable answer to the user's question. If an image and sensor data are provided, use them for context.
-
+                const systemPrompt = `You are an expert AI botanist. Answer the user's question based on the provided image and sensor data.
                 **Response Guidelines:**
-                - Synthesize all available information (image, sensors, query) for a holistic recommendation.
-                - Keep answers concise, practical, and under 80 words.
-                - Do not mention that you are an AI model or refer to yourself.
+                - Keep answers concise and practical.
+                - Do not refer to yourself as an AI model.
                 - Current environmental data is: Temperature: ${temp}, Humidity: ${humidity}, Soil Moisture: ${soil}.
-
                 User's question: "${question}"`;
-                
                 promptParts.push(systemPrompt);
-                if (imagePart) {
-                    promptParts.push(imagePart);
-                }
+                if (imagePart) promptParts.push(imagePart);
                 
                 const result = await model.generateContent(promptParts);
                 const response = result.response;
@@ -358,7 +367,7 @@
                 aiAnswer.innerHTML = `<p>${text.replace(/\n/g, '<br>')}</p>`;
             } catch (error) {
                 console.error("AI Assistant Error:", error);
-                aiAnswer.innerHTML = `<p class="text-red-600">An error occurred with the AI Assistant. Please check the console.</p>`;
+                aiAnswer.innerHTML = `<p class="text-red-600">An error occurred with the AI Assistant.</p>`;
             } finally {
                 askAIButton.disabled = false;
             }
@@ -385,9 +394,7 @@
                 reader.onload = (e) => {
                     capturedImage.src = e.target.result;
                     showCapturedImage();
-                    if (!loader.classList.contains('hidden')) {
-                        loader.classList.add('hidden');
-                    }
+                    if (!loader.classList.contains('hidden')) loader.classList.add('hidden');
                     runFullAnalysis();
                 };
                 reader.readAsDataURL(file);
@@ -405,10 +412,8 @@
                 cameraStatus.innerHTML = '<span class="text-red-600">Google API Key not provided. AI features disabled.</span>';
                 console.error("Google API Key not provided.");
             }
-
             await Promise.all([ initCamera(), fetchSensorData() ]);
             loader.classList.add('hidden');
-            // Fetch sensor data every 30 seconds
             setInterval(fetchSensorData, 30000); 
         }
 
